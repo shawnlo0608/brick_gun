@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <!-- 指定繁體中文語系，確保遊戲介面文字正確顯示。 -->
+  <meta charset="UTF-8">
+  <!-- 讓遊戲畫面在手機、平板與桌面瀏覽器中自動縮放。 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- 設定瀏覽器分頁標題。 -->
+  <title>前線哨站 3D｜戰術生存射擊</title>
+  <style>
+    /* 統一所有元素的盒模型，讓版面尺寸容易預測。 */
+    * { box-sizing: border-box; }
+    /* 使用深色頁面背景，讓戰場視窗和 HUD 更突出。 */
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #101411; color: #e8e9df; font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+    /* 讓 3D 畫布填滿整個瀏覽器視窗。 */
+    #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
+    /* 疊加柔和暗角，營造電影鏡頭與戰場觀察的氛圍。 */
+    #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 48%, rgba(2,5,4,.5) 100%); }
+    /* 左上角戰況面板使用半透明墨綠底色。 */
+    .panel { position: fixed; z-index: 3; background: rgba(13,18,15,.72); border: 1px solid rgba(201,211,191,.25); box-shadow: 0 8px 26px rgba(0,0,0,.2); backdrop-filter: blur(8px); }
+    /* 顯示左上角任務、時間與天氣資訊。 */
+    #mission { top: 20px; left: 20px; min-width: 238px; padding: 13px 15px; border-radius: 4px; }
+    /* 突顯任務狀態的第一行文字。 */
+    .mission-title { margin-bottom: 9px; color: #e8ebdd; font-size: 13px; font-weight: 700; letter-spacing: .12em; }
+    /* 將時間、波次和天氣資料分成整齊的行。 */
+    .statline { display: flex; justify-content: space-between; gap: 18px; color: #bcc6b9; font-size: 12px; line-height: 1.9; }
+    /* 右上角分數面板採用緊湊樣式。 */
+    #scorebox { top: 20px; right: 20px; padding: 11px 14px; border-radius: 4px; color: #e6e8dd; font: 600 13px ui-monospace, monospace; letter-spacing: .08em; }
+    /* 右上角音效按鈕可以在戰鬥中切換音樂與效果音。 */
+    #soundToggle { position: fixed; z-index: 10; top: 66px; right: 20px; padding: 8px 11px; color: #dfe5d8; background: rgba(13,18,15,.76); border: 1px solid rgba(201,211,191,.3); border-radius: 3px; font: 11px ui-monospace, monospace; letter-spacing: .08em; cursor: pointer; }
+    /* 畫面底端中央顯示快捷武器選擇列。 */
+    #weaponRack { position: fixed; z-index: 4; bottom: 20px; left: 50%; display: flex; gap: 5px; padding: 5px; transform: translateX(-50%); border-radius: 4px; }
+    /* 每格快捷欄顯示按鍵、武器名稱與選取狀態。 */
+    .weapon-slot { min-width: 94px; padding: 7px 10px; color: #aeb8aa; background: rgba(15,20,17,.76); border: 1px solid rgba(201,211,191,.23); text-align: center; font-size: 10px; letter-spacing: .04em; }
+    /* 目前使用的武器以暖色邊框和亮字標示。 */
+    .weapon-slot.active { color: #f0e6bf; border-color: rgba(219,196,125,.82); background: rgba(50,48,34,.86); }
+    /* 顯示武器快捷鍵編號。 */
+    .weapon-key { display: block; margin-bottom: 3px; color: #e4d79f; font: 600 12px ui-monospace, monospace; }
+    /* 左下角生命值與體力顯示區。 */
+    #vitals { left: 20px; bottom: 20px; width: 245px; padding: 13px 15px; border-radius: 4px; }
+    /* 生命值和備用資源列的標籤樣式。 */
+    .bar-label { display: flex; justify-content: space-between; margin-bottom: 6px; color: #d9ded2; font-size: 11px; }
+    /* 設定狀態列背景槽。 */
+    .bar { height: 7px; margin-bottom: 11px; overflow: hidden; background: rgba(222,232,213,.14); border: 1px solid rgba(230,236,221,.18); }
+    /* 設定生命值填充色與平滑變化。 */
+    #healthFill { width: 100%; height: 100%; background: linear-gradient(90deg, #71936a, #a9c18c); transition: width .15s, background .2s; }
+    /* 設定體力條填充色。 */
+    #staminaFill { width: 100%; height: 100%; background: #b5ad77; transition: width .1s; }
+    /* 右下角彈藥與武器資訊面板。 */
+    #ammo { right: 20px; bottom: 20px; min-width: 205px; padding: 12px 15px; border-radius: 4px; text-align: right; }
+    /* 彈匣子彈數以較大字體顯示。 */
+    #ammoCount { color: #f0eee4; font: 600 27px ui-monospace, monospace; letter-spacing: .03em; }
+    /* 顯示武器名稱和換彈狀態。 */
+    #weaponLabel { margin-top: 2px; color: #b3bdb0; font-size: 11px; letter-spacing: .08em; }
+    /* 置中顯示四段式瞄準準星。 */
+    #crosshair { position: fixed; z-index: 4; top: 50%; left: 50%; width: 22px; height: 22px; transform: translate(-50%,-50%); pointer-events: none; }
+    /* 準星中心的小圓環。 */
+    #crosshair::before { content: ""; position: absolute; inset: 7px; border: 1px solid rgba(247,245,228,.9); border-radius: 50%; box-shadow: 0 0 3px #000; }
+    /* 用四條短線組成低調的戰術準星。 */
+    #crosshair::after { content: ""; position: absolute; inset: 0; background: linear-gradient(#f4f1df,#f4f1df) center top/1px 5px no-repeat, linear-gradient(#f4f1df,#f4f1df) center bottom/1px 5px no-repeat, linear-gradient(#f4f1df,#f4f1df) left center/5px 1px no-repeat, linear-gradient(#f4f1df,#f4f1df) right center/5px 1px no-repeat; filter: drop-shadow(0 0 2px #000); }
+    /* 遊戲開始、暫停和失敗時使用同一個全畫面資訊層。 */
+    #overlay { position: fixed; z-index: 8; inset: 0; display: grid; place-items: center; padding: 24px; background: linear-gradient(180deg, rgba(8,12,10,.42), rgba(7,11,9,.76)); text-align: center; cursor: pointer; }
+    /* 隱藏狀態層時完全移出畫面互動。 */
+    #overlay.hidden { display: none; }
+    /* 資訊層中央卡片使用暗色玻璃感面板。 */
+    .card { width: min(520px, 100%); padding: 30px 28px; border: 1px solid rgba(221,230,211,.33); border-radius: 5px; background: rgba(17,23,19,.83); box-shadow: 0 22px 90px #0008; backdrop-filter: blur(10px); }
+    /* 主標題使用大字重與寬字距。 */
+    #overlayTitle { margin: 0 0 10px; color: #edf0e4; font-size: clamp(24px, 4vw, 36px); letter-spacing: .09em; }
+    /* 說明文字採用灰綠色，保持與背景的對比。 */
+    #overlayText { margin: 0 auto 20px; max-width: 420px; color: #c3ccbe; font-size: 14px; line-height: 1.8; }
+    /* 強調操作提示文字。 */
+    #overlayHint { color: #ddcc93; font-size: 12px; letter-spacing: .14em; }
+    /* 屏幕中央顯示短暫任務通知。 */
+    #toast { position: fixed; z-index: 5; top: 22%; left: 50%; transform: translateX(-50%); padding: 9px 16px; color: #f0ead0; background: rgba(15,20,17,.72); border: 1px solid rgba(225,223,190,.27); font-size: 14px; letter-spacing: .1em; opacity: 0; transition: opacity .25s; pointer-events: none; }
+    /* 只在通知有效時顯示文字。 */
+    #toast.visible { opacity: 1; }
+    /* 小螢幕將面板往內縮並減少邊距。 */
+    @media (max-width: 640px) { #mission { top: 10px; left: 10px; min-width: 190px; padding: 9px 11px; } #scorebox { top: 10px; right: 10px; padding: 8px; font-size: 11px; } #soundToggle { top: 52px; right: 10px; } #vitals { left: 10px; bottom: 10px; width: 160px; padding: 9px 11px; } #ammo { right: 10px; bottom: 10px; min-width: 128px; padding: 8px 10px; } #ammoCount { font-size: 20px; } #weaponRack { bottom: 100px; gap: 3px; } .weapon-slot { min-width: 72px; padding: 6px 5px; font-size: 9px; } }
+  </style>
+</head>
+<body>
+  <!-- WebGL 3D 場景會由 JavaScript 繪製在這張畫布上。 -->
+  <canvas id="game" aria-label="第一人稱 3D 戰術射擊遊戲畫面"></canvas>
+  <!-- 疊加電影感暗角，不會攔截滑鼠操作。 -->
+  <div id="vignette"></div>
+  <!-- 顯示任務波次、遊戲時間與目前天氣。 -->
+  <section id="mission" class="panel" aria-live="polite">
+    <!-- 左上面板標題。 -->
+    <div class="mission-title">前線哨站　/　生存任務</div>
+    <!-- 透過 JavaScript 更新目前波次。 -->
+    <div class="statline"><span>敵軍波次</span><strong id="waveValue">01</strong></div>
+    <!-- 透過 JavaScript 更新日夜時間。 -->
+    <div class="statline"><span>戰場時間</span><strong id="timeValue">06:00</strong></div>
+    <!-- 透過 JavaScript 更新天氣狀態。 -->
+    <div class="statline"><span>天候狀態</span><strong id="weatherValue">晴朗</strong></div>
+  </section>
+  <!-- 顯示目前累積分數。 -->
+  <div id="scorebox" class="panel">SCORE <span id="scoreValue">000000</span></div>
+  <!-- 讓玩家能開關背景音樂和戰鬥音效。 -->
+  <button id="soundToggle" type="button">SOUND　ON</button>
+  <!-- 顯示玩家生命值與衝刺體力。 -->
+  <section id="vitals" class="panel">
+    <!-- 顯示生命值與目前數值。 -->
+    <div class="bar-label"><span>生命狀態</span><strong id="healthValue">100</strong></div>
+    <!-- 生命值填充寬度由 JavaScript 控制。 -->
+    <div class="bar"><div id="healthFill"></div></div>
+    <!-- 顯示體力標籤與衝刺提示。 -->
+    <div class="bar-label"><span>體力／衝刺</span><span id="staminaValue">100%</span></div>
+    <!-- 體力條填充寬度由 JavaScript 控制。 -->
+    <div class="bar" style="margin-bottom:0"><div id="staminaFill"></div></div>
+  </section>
+  <!-- 顯示目前彈匣與備用彈藥。 -->
+  <section id="ammo" class="panel">
+    <!-- JavaScript 會更新目前子彈和備彈數。 -->
+    <div id="ammoCount">30 <span style="color:#899184;font-size:17px">/ 180</span></div>
+    <!-- 顯示武器種類或裝填狀態。 -->
+    <div id="weaponLabel">突擊步槍　·　READY</div>
+  </section>
+  <!-- 顯示步槍、狙擊槍和散彈槍的快捷切換提示。 -->
+  <div id="weaponRack" class="panel" aria-label="武器選擇列">
+    <!-- 數字 1 切換至突擊步槍。 -->
+    <div class="weapon-slot active" data-slot="0"><span class="weapon-key">1</span>突擊步槍</div>
+    <!-- 數字 2 切換至狙擊步槍。 -->
+    <div class="weapon-slot" data-slot="1"><span class="weapon-key">2</span>狙擊槍</div>
+    <!-- 數字 3 切換至散彈槍。 -->
+    <div class="weapon-slot" data-slot="2"><span class="weapon-key">3</span>散彈槍</div>
+  </div>
+  <!-- 固定準星在視窗中央，對應滑鼠視角方向。 -->
+  <div id="crosshair" aria-hidden="true"></div>
+  <!-- 用於顯示命中、換彈與波次通知。 -->
+  <div id="toast" role="status"></div>
+  <!-- 遊戲開始、暫停或結束時顯示的互動面板。 -->
+  <div id="overlay">
+    <!-- 中央卡片呈現操作教學與狀態訊息。 -->
+    <div class="card">
+      <!-- 面板標題會依遊戲狀態動態變更。 -->
+      <h1 id="overlayTitle">前線哨站</h1>
+      <!-- 面板說明文字會依狀態動態更新。 -->
+      <p id="overlayText">第一人稱 3D 生存射擊。清除逐波逼近的敵軍，在變化的日夜與天候中守住哨站。WASD 移動、滑鼠瞄準、左鍵射擊；按 1／2／3 切換武器，R 換彈，M 切換音效。</p>
+      <!-- 開始遊戲或重新取得滑鼠視角的提示。 -->
+      <div id="overlayHint">點擊畫面進入戰場　·　ESC 可釋放滑鼠</div>
+    </div>
+  </div>
+  <script type="module">
+    // 從 Three.js CDN 匯入 3D 場景、幾何、材質與渲染工具。
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+    // 取得畫布元素，讓 Three.js 將 3D 場景輸出到指定位置。
+    const canvas = document.getElementById('game');
+    // 取得遊戲開始／暫停覆蓋面板。
+    const overlay = document.getElementById('overlay');
+    // 取得覆蓋面板標題節點。
+    const overlayTitle = document.getElementById('overlayTitle');
+    // 取得覆蓋面板操作說明節點。
+    const overlayText = document.getElementById('overlayText');
+    // 取得覆蓋面板提示文字節點。
+    const overlayHint = document.getElementById('overlayHint');
+    // 取得中央短暫提示訊息節點。
+    const toast = document.getElementById('toast');
+    // 取得音效開關按鈕與三個武器快捷欄。
+    const soundToggle = document.getElementById('soundToggle'), weaponSlots = [...document.querySelectorAll('.weapon-slot')];
+    // 取得 HUD 中所有需要更新的文字與狀態條元素。
+    const ui = { wave: document.getElementById('waveValue'), time: document.getElementById('timeValue'), weather: document.getElementById('weatherValue'), score: document.getElementById('scoreValue'), health: document.getElementById('healthValue'), healthFill: document.getElementById('healthFill'), stamina: document.getElementById('staminaValue'), staminaFill: document.getElementById('staminaFill'), ammo: document.getElementById('ammoCount'), weapon: document.getElementById('weaponLabel') };
+    // 設定基本畫面寬高，實際尺寸會隨瀏覽器大小調整。
+    const initialWidth = window.innerWidth;
+    // 記錄目前畫面高度，供攝影機比例計算使用。
+    const initialHeight = window.innerHeight;
+    // 設定遊戲日夜完整循環長度，單位為毫秒。
+    const DAY_LENGTH = 165000;
+    // 設定戰場中可行走範圍的半寬度。
+    const WORLD_LIMIT = 190;
+    // 記錄玩家鍵盤輸入狀態。
+    const keys = Object.create(null);
+    // 建立 Three.js 的 3D 場景容器。
+    const scene = new THREE.Scene();
+    // 建立天空與遠景霧氣的基礎色彩。
+    const skyColor = new THREE.Color('#c5d0cf');
+    // 設定場景背景為天空色，後續會隨日夜變化。
+    scene.background = skyColor;
+    // 加入線性霧效，遮掩遠方地形邊界並增加大氣感。
+    scene.fog = new THREE.Fog(skyColor, 55, 185);
+    // 建立高品質 WebGL 渲染器並使用抗鋸齒。
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    // 讓畫面解析度跟隨裝置像素比，但限制上限避免過度耗用效能。
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+    // 讓渲染器大小與瀏覽器畫面一致。
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    // 使用 ACES 電影色調映射，提升明暗層次與寫實感。
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    // 設定適中的曝光度，避免正午或槍口火光過曝。
+    renderer.toneMappingExposure = 1.05;
+    // 使用 sRGB 輸出色彩，讓材質色彩在螢幕上正確呈現。
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    // 啟用柔和陰影渲染。
+    renderer.shadowMap.enabled = true;
+    // 設定較柔和的 PCF 陰影過濾品質。
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // 建立第一人稱透視攝影機。
+    const camera = new THREE.PerspectiveCamera(74, window.innerWidth / window.innerHeight, 0.08, 250);
+    // 將攝影機放在一般人眼高度。
+    camera.position.set(0, 1.7, 0);
+    // 建立三維座標工具物件，供移動與瞄準運算重複使用。
+    const forward = new THREE.Vector3();
+    // 建立玩家向右移動方向向量。
+    const right = new THREE.Vector3();
+    // 建立臨時計算向量，避免每一幀反覆建立大量物件。
+    const tempVector = new THREE.Vector3();
+    // 記錄玩家左右視角角度。
+    let yaw = 0;
+    // 記錄玩家上下視角角度。
+    let pitch = 0;
+    // 記錄遊戲目前是否已進入滑鼠鎖定狀態。
+    let locked = false;
+    // 記錄遊戲是否暫停或結束。
+    let paused = false;
+    // 記錄遊戲是否已經結束。
+    let gameOver = false;
+    // 記錄玩家是否按住滑鼠開火。
+    let mouseDown = false;
+    // 記錄本場遊戲是否已正式開始。
+    let started = false;
+    // 記錄日夜循環啟動時間。
+    let dayStart = performance.now() - DAY_LENGTH * .32;
+    // 記錄最近一幀的時間戳記。
+    let lastFrame = performance.now();
+    // 記錄最近一次天候切換時間。
+    let weatherChangedAt = performance.now();
+    // 設定自動輪替的天氣狀態。
+    const weatherCycle = ['晴朗', '降雨', '濃霧', '降雪', '雷暴'];
+    // 記錄目前的天氣狀態。
+    let weather = '晴朗';
+    // 記錄目前天候在循環清單中的位置。
+    let weatherIndex = 0;
+    // 記錄雷暴閃電效果結束時間。
+    let lightningUntil = 0;
+    // 記錄玩家目前生命值。
+    let health = 100;
+    // 記錄玩家目前衝刺體力。
+    let stamina = 100;
+    // 記錄目前彈匣內的子彈數量。
+    let ammo = 30;
+    // 記錄目前可用的備用彈藥數量。
+    let reserveAmmo = 180;
+    // 定義突擊步槍、狙擊槍與散彈槍的射擊和裝填參數。
+    const weaponTypes = [
+      { id: 'rifle', name: '突擊步槍', shortName: 'RIFLE', magazine: 30, reserve: 180, damage: 52, cooldown: 185, reloadMs: 1450, range: 92, pellets: 1, spread: 0, sound: 'rifle' },
+      { id: 'sniper', name: '狙擊步槍', shortName: 'SNIPER', magazine: 5, reserve: 45, damage: 140, cooldown: 930, reloadMs: 2350, range: 220, pellets: 1, spread: 0, sound: 'sniper' },
+      { id: 'shotgun', name: '散彈槍', shortName: 'SHOTGUN', magazine: 8, reserve: 72, damage: 14, cooldown: 720, reloadMs: 1900, range: 48, pellets: 8, spread: .085, sound: 'shotgun' }
+    ];
+    // 為每種武器保存各自的彈匣和備用彈藥數量。
+    const weaponInventory = weaponTypes.map((item) => ({ ammo: item.magazine, reserve: item.reserve }));
+    // 記錄目前選取的武器索引，預設為突擊步槍。
+    let weaponIndex = 0;
+    // 記錄玩家是否正在裝填彈匣。
+    let reloading = false;
+    // 記錄裝填完成的時間戳記。
+    let reloadCompleteAt = 0;
+    // 記錄裝填動作開始時間，供武器模型播放動畫。
+    let reloadStartedAt = 0;
+    // 記錄換彈過程中的機械提示音是否已播放。
+    let reloadClickPlayed = false;
+    // 記錄下次允許開火的時間。
+    let nextShotAt = 0;
+    // 記錄累計分數與擊倒敵人數量。
+    let score = 0;
+    // 記錄目前敵軍波次。
+    let wave = 1;
+    // 記錄本波尚未生成的敵人數量。
+    let pendingEnemies = 5;
+    // 記錄敵軍生成間隔計時。
+    let spawnTimer = 0;
+    // 記錄上一波結束後的波次轉場時間。
+    let intermission = 0;
+    // 儲存目前場上的敵軍角色。
+    let enemies = [];
+    // 記錄樹木、岩石和木箱的圓形碰撞區，避免玩家穿過場景障礙物。
+    const obstacles = [];
+    // 儲存敵軍射出的子彈與曳光彈物件。
+    let enemyShots = [];
+    // 儲存短暫可見的玩家射擊曳光線。
+    let tracers = [];
+    // 儲存 HUD 通知的文字與消失時間。
+    let toastTimer = 0;
+    // 記錄槍口火光何時熄滅。
+    let muzzleUntil = 0;
+    // 記錄武器模型的後座動畫程度。
+    let recoil = 0;
+    // 記錄玩家受傷後的短暫無敵時間。
+    let hurtCooldown = 0;
+    // 記錄目前音訊引擎、主音量和音樂／效果音匯流排。
+    let audioContext = null, masterGain = null, musicGain = null, sfxGain = null, noiseBuffer = null;
+    // 記錄背景音樂是否已啟動、音效是否開啟和目前和弦位置。
+    let musicStarted = false, soundEnabled = true, musicStep = 0;
+    // 記錄背景音樂的下一次合成排程計時器。
+    let musicTimer = 0;
+    // 建立地形高度函式，使地面具有自然起伏。
+    function terrainHeight(x, z) { return Math.sin(x * .019) * 2.05 + Math.cos(z * .024) * 1.55 + Math.sin((x + z) * .016) * 1.25 + Math.sin(x * .057 + z * .032) * .42 + Math.cos(z * .068 - x * .043) * .28; }
+    // 測試指定水平位置是否碰到地圖邊界、靜態障礙物或敵人。
+    function isBlocked(x, z, radius = .48, includeEnemies = false, ignoreEnemy = null) {
+      // 玩家與敵人都不可跨出可行走戰場邊界。
+      if (x < -WORLD_LIMIT + radius || x > WORLD_LIMIT - radius || z < -WORLD_LIMIT + radius || z > WORLD_LIMIT - radius) return true;
+      // 檢查角色碰撞圓是否與任一靜態物件重疊。
+      for (const obstacle of obstacles) if (Math.hypot(x - obstacle.x, z - obstacle.z) < radius + obstacle.radius) return true;
+      // 玩家移動時也將存活敵兵視為有實體的角色。
+      if (includeEnemies) for (const enemy of enemies) if (enemy !== ignoreEnemy && enemy.alive && Math.hypot(x - enemy.x, z - enemy.z) < radius + .42) return true;
+      // 沒有碰撞時允許角色移動到此位置。
+      return false;
+    }
+    // 建立環境光，提供物件基本可見度。
+    const hemiLight = new THREE.HemisphereLight(0xc7d4db, 0x454238, 1.15);
+    // 將環境光加進場景。
+    scene.add(hemiLight);
+    // 建立可投射長陰影的方向光，代表太陽或月光。
+    const sunLight = new THREE.DirectionalLight(0xffe4bb, 2.6);
+    // 設定陽光陰影貼圖解析度。
+    sunLight.shadow.mapSize.set(1536, 1536);
+    // 設定光源陰影相機涵蓋的水平視野。
+    sunLight.shadow.camera.left = -70; sunLight.shadow.camera.right = 70;
+    // 設定光源陰影相機涵蓋的深度範圍。
+    sunLight.shadow.camera.top = 70; sunLight.shadow.camera.bottom = -70;
+    // 設定陰影相機遠平面。
+    sunLight.shadow.camera.far = 220;
+    // 設定柔和陰影偏移，降低表面斑點。
+    sunLight.shadow.normalBias = .035;
+    // 將太陽方向光放入場景。
+    scene.add(sunLight);
+    // 將方向光目標加入場景，以便隨玩家位置更新。
+    scene.add(sunLight.target);
+    // 建立月光方向光，夜間會逐漸增亮。
+    const moonLight = new THREE.DirectionalLight(0x91add2, .12);
+    // 設定月光的陰影品質，不另投射陰影以節省效能。
+    moonLight.castShadow = false;
+    // 將月光放入場景。
+    scene.add(moonLight);
+    // 建立雷擊時的瞬間閃光光源。
+    const lightningLight = new THREE.PointLight(0xc9dcff, 0, 62, 1.7);
+    // 將閃電光源加入場景。
+    scene.add(lightningLight);
+    // 建立玩家位置，所有移動與敵人追蹤都參照此物件。
+    const player = { x: 0, z: 0, jump: 0, verticalSpeed: 0, walkPhase: 0 };
+    // 依起始地形高度設定攝影機，確保開始畫面也從地面上方觀看。
+    camera.position.set(player.x, terrainHeight(player.x, player.z) + 1.68, player.z);
+    // 建立太陽球體材質，使用發光材質模擬柔亮日輪。
+    const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xffe0a1 });
+    // 建立太陽球體並設定尺寸。
+    const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(4.2, 24, 16), sunMaterial);
+    // 將太陽球體加入場景。
+    scene.add(sunMesh);
+    // 建立月亮材質，使用淡冷色自發光外觀。
+    const moonMaterial = new THREE.MeshBasicMaterial({ color: 0xd8e3ef });
+    // 建立月亮球體。
+    const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(2.6, 20, 14), moonMaterial);
+    // 將月亮加入場景。
+    scene.add(moonMesh);
+    // 建立星空點雲的位置資料。
+    const starPositions = new Float32Array(260 * 3);
+    // 將星點均勻散佈在遠離玩家的半球上空。
+    for (let i = 0; i < 260; i++) { const a = Math.random() * Math.PI * 2; const r = 100 + Math.random() * 90; starPositions[i * 3] = Math.cos(a) * r; starPositions[i * 3 + 1] = 18 + Math.random() * 95; starPositions[i * 3 + 2] = Math.sin(a) * r; }
+    // 建立星點緩衝幾何並載入座標資料。
+    const starGeometry = new THREE.BufferGeometry(); starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    // 建立柔白色星星點材質。
+    const starMaterial = new THREE.PointsMaterial({ color: 0xf4eedc, size: .75, sizeAttenuation: false, transparent: true, opacity: .85 });
+    // 建立星空物件並加入場景。
+    const stars = new THREE.Points(starGeometry, starMaterial); scene.add(stars);
+    // 建立程序化地表紋理畫布，不依賴外部貼圖檔案。
+    const textureCanvas = document.createElement('canvas');
+    // 設定地表紋理的像素寬度。
+    textureCanvas.width = 256;
+    // 設定地表紋理的像素高度。
+    textureCanvas.height = 256;
+    // 取得紋理畫布的 2D 繪圖環境。
+    const textureContext = textureCanvas.getContext('2d');
+    // 先將整張紋理填成暗橄欖色。
+    textureContext.fillStyle = '#69684b'; textureContext.fillRect(0, 0, 256, 256);
+    // 以大量隨機色點製作草地、泥土和碎石的細節。
+    for (let i = 0; i < 6800; i++) { const v = 55 + Math.floor(Math.random() * 100); textureContext.fillStyle = `rgba(${v + 15},${v + 10},${v - 8},${Math.random() * .45})`; textureContext.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 3, 1 + Math.random() * 2); }
+    // 將程序化畫布包裝成 Three.js 貼圖。
+    const groundTexture = new THREE.CanvasTexture(textureCanvas);
+    // 設定貼圖重複模式，讓大片地面不會被拉伸。
+    groundTexture.wrapS = THREE.RepeatWrapping; groundTexture.wrapT = THREE.RepeatWrapping;
+    // 設定地表貼圖重複次數。
+    groundTexture.repeat.set(30, 30);
+    // 確保地表貼圖使用螢幕正確的色彩空間。
+    groundTexture.colorSpace = THREE.SRGBColorSpace;
+    // 建立 420×420 的細分地形網格。
+    const terrainGeometry = new THREE.PlaneGeometry(420, 420, 168, 168);
+    // 將平面旋轉為水平地面。
+    terrainGeometry.rotateX(-Math.PI / 2);
+    // 取得地形頂點位置陣列。
+    const terrainPositions = terrainGeometry.attributes.position;
+    // 建立頂點色陣列，讓坡面、草地與高處岩土出現自然色差。
+    const terrainColors = new Float32Array(terrainPositions.count * 3);
+    // 建立低處草地和高處裸土之間的漸層色彩。
+    const grassTint = new THREE.Color('#d1d2b0'), rockTint = new THREE.Color('#a7a69b');
+    // 逐頂點套用地勢起伏與高度色差，形成更細緻的地形表面。
+    for (let i = 0; i < terrainPositions.count; i++) { const x = terrainPositions.getX(i), z = terrainPositions.getZ(i); const height = terrainHeight(x, z); terrainPositions.setY(i, height); const exposed = THREE.MathUtils.smoothstep(height + Math.sin(x * .11 + z * .08) * .42, 1.1, 4.8); const color = grassTint.clone().lerp(rockTint, exposed); const variation = .94 + .06 * Math.sin(x * .19) * Math.cos(z * .17); terrainColors[i * 3] = color.r * variation; terrainColors[i * 3 + 1] = color.g * variation; terrainColors[i * 3 + 2] = color.b * variation; }
+    // 將地貌色差資料掛到地形幾何，交由 GPU 插值呈現。
+    terrainGeometry.setAttribute('color', new THREE.BufferAttribute(terrainColors, 3));
+    // 重算地形法線，讓光照依據起伏正確變化。
+    terrainGeometry.computeVertexNormals();
+    // 建立粗糙、不反光的草地與泥土混合材質。
+    const terrainMaterial = new THREE.MeshStandardMaterial({ map: groundTexture, color: 0xffffff, vertexColors: true, roughness: 1, metalness: 0 });
+    // 建立地形網格。
+    const terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
+    // 設定地形接受陰影。
+    terrain.receiveShadow = true;
+    // 將地面放入場景。
+    scene.add(terrain);
+    // 建立通用綠灰色樹幹材質。
+    const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x51483a, roughness: 1 });
+    // 建立深綠色松針材質。
+    const pineMaterialA = new THREE.MeshStandardMaterial({ color: 0x304337, roughness: .95 });
+    // 建立較淺的松針材質，讓樹冠有層次變化。
+    const pineMaterialB = new THREE.MeshStandardMaterial({ color: 0x405645, roughness: .95 });
+    // 建立所有松樹共用的樹幹實例物件。
+    const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(.2, .34, 4.3, 7), trunkMaterial, 190);
+    // 建立第一層松樹冠的實例物件。
+    const pineLower = new THREE.InstancedMesh(new THREE.ConeGeometry(2.8, 5.7, 8), pineMaterialA, 190);
+    // 建立第二層松樹冠的實例物件。
+    const pineUpper = new THREE.InstancedMesh(new THREE.ConeGeometry(2.1, 4.8, 8), pineMaterialB, 190);
+    // 建立暫存變換物件，快速設定每棵樹的矩陣。
+    const dummy = new THREE.Object3D();
+    // 為每棵松樹產生位置、高度與縮放差異。
+    for (let i = 0; i < 190; i++) {
+      // 隨機挑選戰場中的水平位置。
+      const x = (Math.random() - .5) * 382, z = (Math.random() - .5) * 382;
+      // 在起始區域保留空間，避免玩家出生時陷入樹叢。
+      if (Math.hypot(x, z) < 18) { i--; continue; }
+      // 依地勢取樣樹木根部高度。
+      const y = terrainHeight(x, z), scale = .65 + Math.random() * .8;
+      // 將樹幹底部加入碰撞清單，玩家無法穿越樹身。
+      obstacles.push({ x, z, radius: .34 * scale });
+      // 隨機設定樹木的水平旋轉角。
+      const rotation = Math.random() * Math.PI * 2;
+      // 設定樹幹的座標、旋轉與縮放矩陣。
+      dummy.position.set(x, y + 2.15 * scale, z); dummy.rotation.set(0, rotation, 0); dummy.scale.set(scale, scale, scale); dummy.updateMatrix(); trunks.setMatrixAt(i, dummy.matrix);
+      // 設定松樹下層樹冠的位置與縮放。
+      dummy.position.set(x, y + 4.15 * scale, z); dummy.rotation.set(0, rotation, 0); dummy.scale.set(scale, scale, scale); dummy.updateMatrix(); pineLower.setMatrixAt(i, dummy.matrix);
+      // 設定松樹上層樹冠的位置與縮放。
+      dummy.position.set(x, y + 6.1 * scale, z); dummy.rotation.set(0, rotation, 0); dummy.scale.set(scale * .78, scale, scale * .78); dummy.updateMatrix(); pineUpper.setMatrixAt(i, dummy.matrix);
+    }
+    // 樹幹與樹冠都可以投射陰影。
+    trunks.castShadow = true; pineLower.castShadow = true; pineUpper.castShadow = true;
+    // 將三組實例化森林網格加入場景。
+    scene.add(trunks, pineLower, pineUpper);
+    // 建立共享岩石材質，降低場景材質切換成本。
+    const rockMaterial = new THREE.MeshStandardMaterial({ color: 0x696b61, roughness: .97 });
+    // 建立 100 顆不規則低多邊形石塊的實例容器。
+    const rocks = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), rockMaterial, 100);
+    // 逐顆配置石塊位置、大小和旋轉。
+    for (let i = 0; i < 100; i++) { const x = (Math.random() - .5) * 370, z = (Math.random() - .5) * 370; if (Math.hypot(x, z) < 13) { i--; continue; } const s = .25 + Math.random() * .75; obstacles.push({ x, z, radius: s * 1.08 }); dummy.position.set(x, terrainHeight(x, z) + s * .45, z); dummy.rotation.set(Math.random() * 2, Math.random() * 3, Math.random() * 2); dummy.scale.set(s * 1.5, s, s); dummy.updateMatrix(); rocks.setMatrixAt(i, dummy.matrix); }
+    // 岩石可投射陰影並接受地表光照。
+    rocks.castShadow = true;
+    // 將岩石群放入場景。
+    scene.add(rocks);
+    // 建立木箱與障礙物使用的風化木材材質。
+    const crateMaterial = new THREE.MeshStandardMaterial({ color: 0x665c48, roughness: .94 });
+    // 建立幾組戰場補給箱作為近景掩體裝飾。
+    for (let i = 0; i < 22; i++) {
+      // 將木箱散布在起始點周遭以外的區域。
+      const x = (Math.random() - .5) * 160, z = (Math.random() - .5) * 160;
+      // 避開正中央出生區，避免一開始卡住玩家。
+      if (Math.hypot(x, z) < 11) continue;
+      // 建立大小略有差異的木箱網格。
+      const boxWidth = 1.5 + Math.random() * .6, boxDepth = 1.3 + Math.random() * .5;
+      // 為木箱使用略大的圓形近似碰撞範圍，避免角色穿過箱角。
+      obstacles.push({ x, z, radius: Math.hypot(boxWidth, boxDepth) * .5 });
+      // 使用剛才記錄的長寬建立木箱網格。
+      const box = new THREE.Mesh(new THREE.BoxGeometry(boxWidth, 1.25, boxDepth), crateMaterial);
+      // 將木箱放在地形表面。
+      box.position.set(x, terrainHeight(x, z) + .63, z);
+      // 隨機旋轉木箱，讓配置更自然。
+      box.rotation.y = Math.random() * Math.PI;
+      // 設定木箱投射與接收陰影。
+      box.castShadow = true; box.receiveShadow = true;
+      // 將木箱加入戰場。
+      scene.add(box);
+    }
+    // 建立一個共享雲層群組，所有雲朵會緩慢移動。
+    const cloudGroup = new THREE.Group();
+    // 建立雲塊使用的半透明霧白材質。
+    const cloudMaterial = new THREE.MeshStandardMaterial({ color: 0xc3cbd0, roughness: 1, transparent: true, opacity: .38, depthWrite: false });
+    // 建立多個由球形雲塊組成的雲群。
+    const cloudObjects = [];
+    // 逐組配置高空雲塊。
+    for (let i = 0; i < 10; i++) {
+      // 建立一朵雲的群組容器。
+      const cloud = new THREE.Group();
+      // 設定雲朵主體的大致寬度與高度。
+      const scale = 2.8 + Math.random() * 4.5;
+      // 在群組中堆疊不同大小球體，模擬自然雲團。
+      for (let j = 0; j < 5; j++) { const puff = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 7), cloudMaterial); puff.position.set((j - 2) * scale * .72, Math.sin(j * 1.8) * scale * .16, Math.cos(j * 2.1) * scale * .25); puff.scale.set(scale * .82, scale * .28, scale * .52); cloud.add(puff); }
+      // 將雲朵放在玩家出生區附近的高空。
+      cloud.position.set((Math.random() - .5) * 250, 34 + Math.random() * 22, (Math.random() - .5) * 230);
+      // 設定雲層的水平飄移速度。
+      cloud.userData.speed = 1.2 + Math.random() * 2.4;
+      // 將雲朵加入雲群與場景。
+      cloudObjects.push(cloud); cloudGroup.add(cloud);
+    }
+    // 將雲群加入場景。
+    scene.add(cloudGroup);
+    // 建立雨線使用的動態線段頂點陣列。
+    const rainCount = 380;
+    // 每條雨線由頭尾兩個 3D 頂點構成。
+    const rainPositions = new Float32Array(rainCount * 2 * 3);
+    // 為雨滴設定一開始就在玩家周圍上空的位置。
+    for (let i = 0; i < rainCount; i++) { const p = i * 6; const x = player.x + (Math.random() - .5) * 42; const y = 5 + Math.random() * 25; const z = player.z + (Math.random() - .5) * 42; rainPositions[p] = x; rainPositions[p + 1] = y; rainPositions[p + 2] = z; rainPositions[p + 3] = x - .25; rainPositions[p + 4] = y - .95; rainPositions[p + 5] = z; }
+    // 建立雨線緩衝幾何並註冊動態座標屬性。
+    const rainGeometry = new THREE.BufferGeometry(); rainGeometry.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3));
+    // 使用淡藍灰色半透明線段呈現雨勢。
+    const rainMaterial = new THREE.LineBasicMaterial({ color: 0xb6c9d5, transparent: true, opacity: .48 });
+    // 建立雨線物件並預設隱藏。
+    const rainLines = new THREE.LineSegments(rainGeometry, rainMaterial); rainLines.visible = false; scene.add(rainLines);
+    // 建立雪點動態頂點資料。
+    const snowCount = 270;
+    // 每一片雪花只需要一個 3D 點位置。
+    const snowPositions = new Float32Array(snowCount * 3);
+    // 設定雪花初始位置與高度。
+    for (let i = 0; i < snowCount; i++) { snowPositions[i * 3] = player.x + (Math.random() - .5) * 42; snowPositions[i * 3 + 1] = Math.random() * 28; snowPositions[i * 3 + 2] = player.z + (Math.random() - .5) * 42; }
+    // 建立雪點緩衝幾何。
+    const snowGeometry = new THREE.BufferGeometry(); snowGeometry.setAttribute('position', new THREE.BufferAttribute(snowPositions, 3));
+    // 設定雪花大小與柔白色。
+    const snowMaterial = new THREE.PointsMaterial({ color: 0xe4ebee, size: .095, sizeAttenuation: true, transparent: true, opacity: .88 });
+    // 建立雪花粒子並預設隱藏。
+    const snowPoints = new THREE.Points(snowGeometry, snowMaterial); snowPoints.visible = false; scene.add(snowPoints);
+    // 建立共用第一人稱武器根群組，切槍時只切換內部模型。
+    const weapon = new THREE.Group();
+    // 設定槍身金屬材質。
+    const gunBodyMaterial = new THREE.MeshStandardMaterial({ color: 0x353a35, roughness: .55, metalness: .42 });
+    // 設定槍托、握把和槍管的深色材質。
+    const gunDarkMaterial = new THREE.MeshStandardMaterial({ color: 0x202521, roughness: .8, metalness: .12 });
+    // 建立指定類型的簡化第一人稱槍枝模型和可動畫的裝填部件。
+    function createWeaponViewModel(type) {
+      // 建立單一槍枝的零件群組。
+      const group = new THREE.Group();
+      // 依槍型選擇機匣、槍管長度、槍管口徑與槍口位置。
+      const isSniper = type.id === 'sniper', isShotgun = type.id === 'shotgun';
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(isShotgun ? .19 : .16, isSniper ? .17 : .15, isSniper ? .52 : .46), gunBodyMaterial);
+      // 將機匣置於持槍手前方的中央位置。
+      receiver.position.set(0, 0, 0); group.add(receiver);
+      // 建立不同口徑和長度的槍管，狙擊槍槍管最長、散彈槍槍管最粗。
+      const barrelLength = isSniper ? 1.18 : isShotgun ? .62 : .72;
+      const barrelRadius = isSniper ? .023 : isShotgun ? .043 : .03;
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(barrelRadius * .82, barrelRadius, barrelLength, 12), gunDarkMaterial);
+      // 將槍管的圓柱軸轉向攝影機前方並移到機匣前端。
+      barrel.rotation.x = Math.PI / 2; barrel.position.set(0, .025, isSniper ? -.83 : isShotgun ? -.44 : -.51); group.add(barrel);
+      // 建立槍托與握把，三種槍型使用略有差異的尺寸。
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(isShotgun ? .15 : .12, .13, isSniper ? .36 : .28), gunDarkMaterial);
+      stock.position.set(0, -.015, isSniper ? .38 : .34); group.add(stock);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(.11, .22, .12), gunDarkMaterial); grip.position.set(0, -.15, .12); grip.rotation.x = -.18; group.add(grip);
+      // 建立可以在換彈時下移、再插回機匣的彈匣群組。
+      const magazine = new THREE.Group();
+      const magazineMesh = new THREE.Mesh(new THREE.BoxGeometry(isSniper ? .105 : .09, isSniper ? .29 : .25, .13), gunDarkMaterial);
+      magazine.add(magazineMesh); magazine.position.set(0, -.18, -.02); magazine.rotation.x = -.16; magazine.visible = !isShotgun; group.add(magazine);
+      // 依武器種類加入瞄準鏡、槍管護木或狙擊槍槍機外觀。
+      if (isSniper) {
+        const scopeBody = new THREE.Mesh(new THREE.CylinderGeometry(.055, .055, .38, 12), gunDarkMaterial); scopeBody.rotation.x = Math.PI / 2; scopeBody.position.set(0, .14, -.2); group.add(scopeBody);
+        const scopeLens = new THREE.Mesh(new THREE.CylinderGeometry(.067, .067, .045, 12), new THREE.MeshStandardMaterial({ color: 0x293b3a, roughness: .25, metalness: .35 })); scopeLens.rotation.x = Math.PI / 2; scopeLens.position.set(0, .14, -.405); group.add(scopeLens);
+      } else if (isShotgun) {
+        const pump = new THREE.Mesh(new THREE.BoxGeometry(.16, .12, .28), gunDarkMaterial); pump.position.set(0, -.07, -.36); group.add(pump);
+        const tube = new THREE.Mesh(new THREE.CylinderGeometry(.035, .035, .52, 10), gunBodyMaterial); tube.rotation.x = Math.PI / 2; tube.position.set(-.08, -.14, -.37); group.add(tube);
+      } else {
+        const sight = new THREE.Mesh(new THREE.CylinderGeometry(.045, .045, .18, 12), gunDarkMaterial); sight.rotation.x = Math.PI / 2; sight.position.set(0, .11, -.06); group.add(sight);
+      }
+      // 加入狙擊槍拉柄或散彈槍紅色彈殼，供裝填期間播放簡單動作。
+      const bolt = new THREE.Mesh(new THREE.BoxGeometry(.08, .055, .12), gunDarkMaterial); bolt.position.set(.1, .09, -.08); bolt.visible = isSniper; group.add(bolt);
+      const shell = new THREE.Mesh(new THREE.CylinderGeometry(.026, .026, .14, 10), new THREE.MeshStandardMaterial({ color: 0x9a3f27, roughness: .65 })); shell.rotation.z = Math.PI / 2; shell.position.set(-.12, -.17, .08); shell.visible = false; group.add(shell);
+      // 保存裝填動畫所需的初始位置、槍口座標和零件參照。
+      return { group, magazine, magazineBase: magazine.position.clone(), magazineRotation: magazine.rotation.x, bolt, boltBaseZ: bolt.position.z, shell, muzzleZ: isSniper ? -1.42 : isShotgun ? -.82 : -1.05 };
+    }
+    // 依武器設定建立三套槍枝外觀。
+    const weaponModels = weaponTypes.map(createWeaponViewModel);
+    // 將三套模型加到共用根群組並只顯示起始步槍。
+    weaponModels.forEach((model, index) => { weapon.add(model.group); model.group.visible = index === weaponIndex; });
+    // 設定武器在第一人稱畫面中的位置。
+    weapon.position.set(.36, -.31, -.75);
+    // 縮放武器模型，讓步槍自然落在視野右下角。
+    weapon.scale.setScalar(.43);
+    // 將武器掛在攝影機上，使其隨玩家視角移動。
+    camera.add(weapon);
+    // 將攝影機加入場景。
+    scene.add(camera);
+    // 建立槍口火光的點光源並預設關閉。
+    const muzzleLight = new THREE.PointLight(0xffb55d, 0, 5, 2);
+    // 將槍口火光光源掛到武器槍管前端。
+    muzzleLight.position.set(0, .02, -.86); weapon.add(muzzleLight);
+    // 取得目前武器的規格設定。
+    function currentWeapon() { return weaponTypes[weaponIndex]; }
+    // 套用選中槍枝的模型、槍口位置和 HUD 選取狀態。
+    function applyWeaponModel() {
+      // 讓三套模型中只有當前武器可見。
+      weaponModels.forEach((model, index) => { model.group.visible = index === weaponIndex; });
+      // 將槍口火光光源放到當前武器槍管前端。
+      muzzleLight.position.z = weaponModels[weaponIndex].muzzleZ;
+      // 更新底部快捷欄的選中外觀。
+      weaponSlots.forEach((slot, index) => slot.classList.toggle('active', index === weaponIndex));
+    }
+    // 初始化槍口火光位置與武器快捷欄狀態。
+    applyWeaponModel();
+    // 以數字快捷鍵切換武器並保存各自的彈匣狀態。
+    function selectWeapon(index) {
+      // 忽略無效索引、目前武器和裝填過程中的切換請求。
+      if (index < 0 || index >= weaponTypes.length || index === weaponIndex || reloading || gameOver) return;
+      // 保存目前武器彈匣與備彈，再載入新武器存檔。
+      weaponInventory[weaponIndex] = { ammo, reserve: reserveAmmo }; weaponIndex = index;
+      ammo = weaponInventory[index].ammo; reserveAmmo = weaponInventory[index].reserve;
+      // 清除舊武器的後座並刷新模型和介面。
+      recoil = 0; nextShotAt = 0; weapon.rotation.set(0, 0, 0); applyWeaponModel();
+      ui.ammo.innerHTML = `${String(ammo).padStart(2, '0')} <span style="color:#899184;font-size:17px">/ ${reserveAmmo}</span>`; ui.weapon.textContent = `${currentWeapon().name}　·　READY`;
+      // 發出金屬切換聲並顯示當前武器。
+      playMechanicalClick(true); showToast(`切換至 ${currentWeapon().name}`, .9);
+    }
+    // 建立射擊射線投射器，用來判定瞄準命中。
+    const raycaster = new THREE.Raycaster();
+    // 限制射擊判定的有效距離。
+    raycaster.far = 92;
+    // 建立畫面中央準星座標。
+    const screenCenter = new THREE.Vector2(0, 0);
+    // 建立玩家子彈曳光線使用的材質。
+    const tracerMaterial = new THREE.LineBasicMaterial({ color: 0xffe2a5, transparent: true, opacity: .9 });
+    // 顯示畫面中央短暫訊息並重設通知時間。
+    function showToast(message, duration = 1.5) { toast.textContent = message; toast.classList.add('visible'); toastTimer = duration; }
+    // 在使用者互動後建立 Web Audio 節點，避免瀏覽器阻擋自動播放。
+    function ensureAudio() {
+      // 玩家已關閉音效時，不建立新的音訊資源。
+      if (!soundEnabled) return;
+      // 第一次呼叫時建立音訊環境和分離的音樂、效果音匯流排。
+      if (!audioContext) {
+        // 同時支援標準 AudioContext 和舊版 WebKit 名稱。
+        const AudioConstructor = window.AudioContext || window.webkitAudioContext;
+        // 不支援 Web Audio 的瀏覽器改為顯示靜音狀態。
+        if (!AudioConstructor) { soundEnabled = false; soundToggle.textContent = 'SOUND　OFF'; return; }
+        // 建立音訊環境與連接至瀏覽器喇叭的總音量節點。
+        audioContext = new AudioConstructor(); masterGain = audioContext.createGain();
+        // 建立背景音樂和槍械效果音的獨立音量控制。
+        musicGain = audioContext.createGain(); sfxGain = audioContext.createGain();
+        // 將音樂與效果音匯入總音量並輸出至音訊裝置。
+        musicGain.connect(masterGain); sfxGain.connect(masterGain); masterGain.connect(audioContext.destination);
+        // 設定背景音量柔和，槍聲保留清晰動態。
+        masterGain.gain.value = .72; musicGain.gain.value = .42; sfxGain.gain.value = .9;
+        // 預先生成白噪音緩衝，供槍聲與機械音使用。
+        noiseBuffer = audioContext.createBuffer(1, Math.floor(audioContext.sampleRate * .7), audioContext.sampleRate);
+        // 將隨機訊號寫入緩衝，後續每個音效可重複使用。
+        const noiseData = noiseBuffer.getChannelData(0); for (let i = 0; i < noiseData.length; i++) noiseData[i] = Math.random() * 2 - 1;
+        // 啟動低頻氛圍層和循環合成和弦。
+        startAmbientMusic();
+      }
+      // 從暫停狀態恢復音訊播放。
+      if (audioContext.state === 'suspended') audioContext.resume();
+    }
+    // 以低頻合成器和緩慢和弦循環產生原創戰場氛圍音樂。
+    function startAmbientMusic() {
+      // 避免重複建立背景音樂振盪器。
+      if (musicStarted || !audioContext) return;
+      // 標記背景音樂已建立。
+      musicStarted = true;
+      // 建立低頻和弦共鳴匯流排。
+      const droneBus = audioContext.createGain(); droneBus.gain.value = .42; droneBus.connect(musicGain);
+      // 使用低音根音與五度音構成不干擾戰鬥的氛圍底色。
+      for (const frequency of [55, 82.41]) { const oscillator = audioContext.createOscillator(); const voiceGain = audioContext.createGain(); oscillator.type = 'sine'; oscillator.frequency.value = frequency; voiceGain.gain.value = frequency === 55 ? .11 : .055; oscillator.connect(voiceGain); voiceGain.connect(droneBus); oscillator.start(); }
+      // 讓低頻音量緩慢呼吸，避免背景音樂過於靜止。
+      const lfo = audioContext.createOscillator(), lfoDepth = audioContext.createGain(); lfo.frequency.value = .09; lfoDepth.gain.value = .035; lfo.connect(lfoDepth); lfoDepth.connect(droneBus.gain); lfo.start();
+      // 定義慢速變化的低音和弦根音序列。
+      const chordRoots = [110, 98, 82.41, 73.42];
+      // 建立一個帶有柔和起伏包絡的和弦音符。
+      const playNextPad = () => {
+        // 音訊環境尚未建立時終止排程。
+        if (!audioContext || !musicGain) return;
+        // 取得目前音訊時間並依序選取和弦根音。
+        const now = audioContext.currentTime, root = chordRoots[musicStep % chordRoots.length]; musicStep++;
+        // 建立柔和的三角波和弦音色與低通濾波器。
+        const pad = audioContext.createOscillator(), filter = audioContext.createBiquadFilter(), envelope = audioContext.createGain();
+        pad.type = 'triangle'; pad.frequency.setValueAtTime(root, now); filter.type = 'lowpass'; filter.frequency.value = 520;
+        // 設定緩慢淡入淡出的音符包絡，避免突兀爆音。
+        envelope.gain.setValueAtTime(.0001, now); envelope.gain.exponentialRampToValueAtTime(.027, now + .8); envelope.gain.exponentialRampToValueAtTime(.0001, now + 3.8);
+        // 將和弦送入音樂匯流排並安排自動結束。
+        pad.connect(filter); filter.connect(envelope); envelope.connect(musicGain); pad.start(now); pad.stop(now + 3.9);
+        // 每隔數秒播放下一個和弦，形成無縫背景音樂循環。
+        musicTimer = window.setTimeout(playNextPad, 3800);
+      };
+      // 開始第一個緩慢和弦音符。
+      playNextPad();
+    }
+    // 平滑切換背景音樂與所有音效的總音量。
+    function setSoundEnabled(enabled) {
+      // 更新靜音狀態與介面按鈕文字。
+      soundEnabled = enabled; soundToggle.textContent = soundEnabled ? 'SOUND　ON' : 'SOUND　OFF';
+      // 開啟音效時初始化音訊，並將總音量柔和拉起。
+      if (soundEnabled) { ensureAudio(); if (masterGain) masterGain.gain.setTargetAtTime(.72, audioContext.currentTime, .06); }
+      // 靜音時用短暫淡出避免突然中斷。
+      else if (masterGain && audioContext) masterGain.gain.setTargetAtTime(.0001, audioContext.currentTime, .08);
+    }
+    // 將暫停狀態反映到背景音樂音量，不影響音效設定。
+    function setMusicPaused(value) { if (musicGain && audioContext && soundEnabled) musicGain.gain.setTargetAtTime(value ? .13 : .42, audioContext.currentTime, .25); }
+    // 播放一次短促機械點擊聲，用於換彈與切換武器。
+    function playMechanicalClick(high = false) {
+      // 音訊尚未解鎖或玩家靜音時略過效果音。
+      if (!soundEnabled || !audioContext) return;
+      // 建立快速衰減的方波點擊音。
+      const now = audioContext.currentTime, oscillator = audioContext.createOscillator(), envelope = audioContext.createGain();
+      oscillator.type = 'square'; oscillator.frequency.setValueAtTime(high ? 1150 : 480, now); oscillator.frequency.exponentialRampToValueAtTime(high ? 360 : 170, now + .055);
+      envelope.gain.setValueAtTime(.0001, now); envelope.gain.exponentialRampToValueAtTime(.11, now + .004); envelope.gain.exponentialRampToValueAtTime(.0001, now + .075);
+      oscillator.connect(envelope); envelope.connect(sfxGain); oscillator.start(now); oscillator.stop(now + .08);
+    }
+    // 合成不同武器各具特色的槍口爆音、低頻衝擊與機械回響。
+    function playGunshot(type, volumeScale = 1) {
+      // 尚未啟動音訊或靜音時不產生槍聲。
+      if (!soundEnabled || !audioContext) return;
+      // 依照武器類型挑選爆音濾波頻率、音量和低頻衝擊音高。
+      const profile = type === 'sniper' ? { cutoff: 3100, volume: .48, bass: 145 } : type === 'shotgun' ? { cutoff: 1250, volume: .65, bass: 72 } : { cutoff: 2200, volume: .4, bass: 96 };
+      // 建立一次性白噪音聲源和槍口爆音低通濾波器。
+      const now = audioContext.currentTime, noise = audioContext.createBufferSource(), filter = audioContext.createBiquadFilter(), noiseEnvelope = audioContext.createGain();
+      noise.buffer = noiseBuffer; filter.type = 'lowpass'; filter.frequency.setValueAtTime(profile.cutoff, now); filter.frequency.exponentialRampToValueAtTime(420, now + .22);
+      // 設定快速爆發、自然收尾的噪音包絡。
+      noiseEnvelope.gain.setValueAtTime(.0001, now); noiseEnvelope.gain.exponentialRampToValueAtTime(profile.volume * volumeScale, now + .003); noiseEnvelope.gain.exponentialRampToValueAtTime(.0001, now + .24);
+      // 將槍聲噪音送入效果音匯流排並限制播放長度。
+      noise.connect(filter); filter.connect(noiseEnvelope); noiseEnvelope.connect(sfxGain); noise.start(now); noise.stop(now + .25);
+      // 加入低頻震動，讓槍聲更有厚度。
+      const thump = audioContext.createOscillator(), thumpEnvelope = audioContext.createGain(); thump.type = 'sine'; thump.frequency.setValueAtTime(profile.bass, now); thump.frequency.exponentialRampToValueAtTime(38, now + .17);
+      thumpEnvelope.gain.setValueAtTime(.0001, now); thumpEnvelope.gain.exponentialRampToValueAtTime((type === 'shotgun' ? .46 : .26) * volumeScale, now + .006); thumpEnvelope.gain.exponentialRampToValueAtTime(.0001, now + .19);
+      thump.connect(thumpEnvelope); thumpEnvelope.connect(sfxGain); thump.start(now); thump.stop(now + .2);
+      // 狙擊槍額外播放短暫的高頻槍機回彈聲。
+      if (type === 'sniper') window.setTimeout(() => playMechanicalClick(true), 130);
+    }
+    // 播放遠處敵軍射擊的低音量回響。
+    function playEnemyShotSound() { if (soundEnabled && audioContext) playGunshot('rifle', .22); }
+    // 建立一個步槍敵兵，回傳位置與戰鬥資料物件。
+    function createEnemy(x, z) {
+      // 建立敵兵根群組，所有身體零件都以此作為本地座標基準。
+      const group = new THREE.Group();
+      // 建立敵方制服材質。
+      const uniform = new THREE.MeshStandardMaterial({ color: 0x55564a, roughness: .88 });
+      // 建立敵方防彈背心材質。
+      const vestMaterial = new THREE.MeshStandardMaterial({ color: 0x343a32, roughness: .82 });
+      // 建立頭盔材質。
+      const helmetMaterial = new THREE.MeshStandardMaterial({ color: 0x3c4338, roughness: .68 });
+      // 建立臉部露膚材質。
+      const skinMaterial = new THREE.MeshStandardMaterial({ color: 0x9c8067, roughness: .94 });
+      // 建立敵兵的軀幹網格。
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(.68, .86, .4), vestMaterial);
+      // 設定軀幹高度位置。
+      torso.position.y = 1.27;
+      // 軀幹接收柔和陰影。
+      torso.castShadow = true; torso.receiveShadow = true; group.add(torso);
+      // 建立胸前裝備板片。
+      const chest = new THREE.Mesh(new THREE.BoxGeometry(.45, .42, .08), uniform);
+      // 將胸前板片貼在軀幹正面。
+      chest.position.set(0, 1.33, .245); group.add(chest);
+      // 逐個建立敵兵胸前的彈匣袋。
+      for (let i = 0; i < 3; i++) { const pouch = new THREE.Mesh(new THREE.BoxGeometry(.1, .16, .08), helmetMaterial); pouch.position.set((i - 1) * .14, 1.28, .3); group.add(pouch); }
+      // 建立頭部網格。
+      const head = new THREE.Mesh(new THREE.SphereGeometry(.23, 14, 10), skinMaterial);
+      // 設定頭部位於軀幹上方。
+      head.position.y = 1.88; head.castShadow = true; group.add(head);
+      // 建立頭盔圓頂。
+      const helmet = new THREE.Mesh(new THREE.SphereGeometry(.26, 14, 9, 0, Math.PI * 2, 0, Math.PI * .58), helmetMaterial);
+      // 將頭盔放在頭部上方。
+      helmet.position.y = 1.98; group.add(helmet);
+      // 建立頭盔前簷。
+      const brim = new THREE.Mesh(new THREE.BoxGeometry(.49, .045, .3), helmetMaterial);
+      // 將頭盔簷片往敵人正面伸出。
+      brim.position.set(0, 1.91, .11); group.add(brim);
+      // 使用木偶關節位置逐一建立敵兵手臂。
+      for (const side of [-1, 1]) { const arm = new THREE.Mesh(new THREE.BoxGeometry(.19, .68, .2), uniform); arm.position.set(side * .44, 1.22, .12); arm.rotation.z = side * -.16; arm.castShadow = true; group.add(arm); }
+      // 逐一建立敵兵褲腿和戰術靴。
+      for (const side of [-1, 1]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(.24, .66, .27), uniform); leg.position.set(side * .19, .48, 0); leg.castShadow = true; group.add(leg); const boot = new THREE.Mesh(new THREE.BoxGeometry(.27, .16, .4), gunDarkMaterial); boot.position.set(side * .19, .1, .06); group.add(boot); }
+      // 建立敵兵手持步槍的槍身。
+      const enemyGun = new THREE.Mesh(new THREE.BoxGeometry(.13, .13, .72), gunDarkMaterial);
+      // 將步槍放在胸前並朝群組正面指向。
+      enemyGun.position.set(.12, 1.12, .42); group.add(enemyGun);
+      // 建立短槍管，使用圓柱體呈現。
+      const enemyBarrel = new THREE.Mesh(new THREE.CylinderGeometry(.025, .025, .48, 8), gunDarkMaterial);
+      // 將槍管旋轉成朝向敵兵正面的方向。
+      enemyBarrel.rotation.x = Math.PI / 2; enemyBarrel.position.set(.12, 1.13, .96); group.add(enemyBarrel);
+      // 將敵兵放在地勢表面。
+      group.position.set(x, terrainHeight(x, z), z);
+      // 讓所有零件都可被玩家的射線命中辨識。
+      const enemy = { group, x, z, hp: 100, maxHp: 100, speed: 3.1 + Math.random() * 1.15 + wave * .14, fireAt: performance.now() + 450 + Math.random() * 650, hitFlash: 0, vestMaterial, walkPhase: Math.random() * 6, alive: true };
+      // 把敵人資料掛到每個零件上，供射線命中時反查目標。
+      group.traverse((object) => { object.userData.enemy = enemy; });
+      // 設定陰影投射與接收狀態。
+      group.traverse((object) => { if (object.isMesh) { object.castShadow = true; object.receiveShadow = true; } });
+      // 將新敵人放入場景。
+      scene.add(group);
+      // 傳回敵人資料供遊戲狀態管理。
+      return enemy;
+    }
+    // 從玩家周邊遠處生成敵兵，避免敵人直接出現在視野中心。
+    function spawnEnemy() {
+      // 預設生成點放在玩家附近，以便重試失敗時仍有合理位置。
+      let spawnX = player.x, spawnZ = player.z;
+      // 最多測試 24 個候選位置，避免敵兵出現在岩石、樹幹或友軍內。
+      for (let attempt = 0; attempt < 24; attempt++) {
+        // 隨機挑選繞玩家一圈的生成角度。
+        const angle = Math.random() * Math.PI * 2;
+        // 在較遠距離產生敵人，讓其有空間加速追擊。
+        const radius = 34 + Math.random() * 20;
+        // 將角度與半徑轉成受邊界限制的水平座標。
+        const candidateX = Math.max(-WORLD_LIMIT + 5, Math.min(WORLD_LIMIT - 5, player.x + Math.cos(angle) * radius));
+        // 計算同一候選點的深度座標。
+        const candidateZ = Math.max(-WORLD_LIMIT + 5, Math.min(WORLD_LIMIT - 5, player.z + Math.sin(angle) * radius));
+        // 候選點必須避開靜態障礙物與其他存活敵兵。
+        if (!isBlocked(candidateX, candidateZ, .65, true)) { spawnX = candidateX; spawnZ = candidateZ; break; }
+      }
+      // 建立敵人並放入敵軍清單。
+      enemies.push(createEnemy(spawnX, spawnZ));
+    }
+    // 由玩家槍口沿準星方向發射一發子彈。
+    function fireWeapon(now) {
+      // 未開始、正在裝填、彈匣空或射速冷卻中時不射擊。
+      if (!started || paused || gameOver || reloading || ammo <= 0 || now < nextShotAt) return;
+      // 讀取所選武器的射速、傷害、射程與散佈參數。
+      const config = currentWeapon();
+      // 設定該武器自己的開火冷卻時間並消耗一發彈藥。
+      nextShotAt = now + config.cooldown; ammo--;
+      // 將目前彈藥數保存到該武器的獨立彈藥欄位。
+      weaponInventory[weaponIndex] = { ammo, reserve: reserveAmmo };
+      // 計算玩家槍口的世界座標並取得存活敵人的可命中模型。
+      const muzzle = new THREE.Vector3(); muzzleLight.getWorldPosition(muzzle);
+      const enemyMeshes = enemies.filter(enemy => enemy.alive).map(enemy => enemy.group);
+      // 散彈槍逐顆發射彈丸，其餘武器只發射一條精準射線。
+      for (let pellet = 0; pellet < config.pellets; pellet++) {
+        // 依照散佈係數微調本顆彈丸的準星射線。
+        const aim = new THREE.Vector2((Math.random() - .5) * config.spread, (Math.random() - .5) * config.spread);
+        raycaster.far = config.range; raycaster.setFromCamera(aim, camera);
+        // 設定未命中時曳光線的遠端終點。
+        const end = camera.position.clone().add(raycaster.ray.direction.clone().multiplyScalar(config.range));
+        // 以射線測試敵人的軀幹、頭部與其他身體零件。
+        const hits = raycaster.intersectObjects(enemyMeshes, true);
+        // 命中仍存活的敵兵時套用該武器傷害並更新命中反應。
+        if (hits.length > 0 && hits[0].object.userData.enemy) {
+          const target = hits[0].object.userData.enemy;
+          if (target.alive) {
+            end.copy(hits[0].point); target.hp -= config.damage; target.hitFlash = .13;
+            showToast('目標命中', .45);
+            // 目標生命值歸零時移除敵兵並增加波次分數。
+            if (target.hp <= 0) { target.alive = false; scene.remove(target.group); score += 100 + wave * 15; showToast('目標已解除　+100', 1.05); }
+          }
+        }
+        // 建立此發子彈的短暫曳光線，散彈槍會呈現多條射線。
+        const tracerGeometry = new THREE.BufferGeometry().setFromPoints([muzzle, end]);
+        const tracer = new THREE.Line(tracerGeometry, tracerMaterial); scene.add(tracer); tracers.push({ object: tracer, geometry: tracerGeometry, life: .075 });
+      }
+      // 開啟槍口閃光並觸發武器後座動畫。
+      muzzleUntil = now + 72; recoil = 1;
+      // 播放目前槍型的爆音與低頻衝擊。
+      playGunshot(config.sound);
+      // 彈匣耗盡時自動開始換彈。
+      if (ammo <= 0) beginReload(now);
+    }
+    // 開始換彈並設定完成時間。
+    function beginReload(now = performance.now()) {
+      // 取得目前槍型規格，檢查彈匣、備彈與遊戲狀態。
+      const config = currentWeapon();
+      if (reloading || ammo >= config.magazine || reserveAmmo <= 0 || gameOver) return;
+      // 啟動對應槍型的換彈動畫並記錄開始與結束時間。
+      reloading = true; reloadStartedAt = now; reloadCompleteAt = now + config.reloadMs; reloadClickPlayed = false;
+      // 播放換彈起始的金屬卡榫聲並顯示武器名稱。
+      playMechanicalClick(); showToast(`${config.name} 裝填中…`, config.reloadMs / 1000);
+    }
+    // 依換彈時間播放槍枝傾斜、彈匣／彈殼移動和槍機拉柄動畫。
+    function updateWeaponAnimation(now, moving) {
+      // 取得目前武器的模型、設定與裝填進度。
+      const model = weaponModels[weaponIndex], config = currentWeapon();
+      const progress = reloading ? THREE.MathUtils.clamp((now - reloadStartedAt) / config.reloadMs, 0, 1) : 0;
+      // 用平滑弧線讓整支武器在裝填期間略微下沉和傾斜。
+      const reloadDip = reloading ? Math.sin(progress * Math.PI) : 0;
+      // 彈匣在換彈中段向下抽出，接著回到機匣位置。
+      const magazineDrop = progress < .16 ? 0 : progress < .38 ? (progress - .16) / .22 : progress < .58 ? 1 : progress < .8 ? 1 - (progress - .58) / .22 : 0;
+      model.magazine.position.set(model.magazineBase.x, model.magazineBase.y - magazineDrop * .38, model.magazineBase.z);
+      model.magazine.rotation.x = model.magazineRotation + magazineDrop * .38;
+      // 狙擊槍裝填期間拉動槍機，散彈槍則逐枚呈現紅色彈殼裝入動作。
+      const boltMotion = progress > .22 && progress < .5 ? Math.sin(((progress - .22) / .28) * Math.PI) * .15 : 0;
+      model.bolt.position.z = model.boltBaseZ + boltMotion;
+      if (config.id === 'shotgun' && reloading && progress < .92) {
+        const shellPhase = ((now - reloadStartedAt) % 420) / 420;
+        model.shell.visible = shellPhase < .72;
+        model.shell.position.set(-.12, -.22 + Math.min(1, shellPhase / .72) * .12, .08 - Math.min(1, shellPhase / .72) * .11);
+      } else model.shell.visible = false;
+      // 裝填進度過半時播放一次槍機／彈殼卡入聲。
+      if (reloading && progress > .52 && !reloadClickPlayed) { playMechanicalClick(true); reloadClickPlayed = true; }
+      // 將走路晃動、射擊後座與換彈下沉組合為武器動畫。
+      weapon.position.y = -.31 + (moving ? Math.sin(player.walkPhase) * .012 : 0) - recoil * .075 - reloadDip * .13;
+      weapon.rotation.x = reloadDip * .28; weapon.rotation.z = reloadDip * .075;
+      // 裝填結束時把所有零件復原到正常待機位置。
+      if (!reloading) { model.magazine.position.copy(model.magazineBase); model.magazine.rotation.x = model.magazineRotation; model.bolt.position.z = model.boltBaseZ; model.shell.visible = false; }
+    }
+    // 建立敵方射擊彈體並朝玩家方向飛行。
+    function enemyFire(enemy) {
+      // 建立子彈發射位置，位於敵兵胸前高度。
+      const origin = new THREE.Vector3(enemy.x, terrainHeight(enemy.x, enemy.z) + 1.2, enemy.z);
+      // 計算帶有些微散射的玩家目標位置。
+      const target = new THREE.Vector3(camera.position.x + (Math.random() - .5) * 1.4, camera.position.y - .3, camera.position.z + (Math.random() - .5) * 1.4);
+      // 將方向向量正規化並設定敵方彈速。
+      const velocity = target.sub(origin).normalize().multiplyScalar(24);
+      // 播放低音量遠距槍聲，補足交火環境感。
+      playEnemyShotSound();
+      // 建立橘紅色自發光彈體材質。
+      const shotMaterial = new THREE.MeshBasicMaterial({ color: 0xff774d });
+      // 建立小型敵方曳光彈球體。
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(.075, 8, 6), shotMaterial);
+      // 將彈體放在敵人槍口位置。
+      mesh.position.copy(origin); scene.add(mesh);
+      // 將敵方彈體資料記錄到清單。
+      enemyShots.push({ mesh, velocity, life: 3.5 });
+    }
+    // 依玩家輸入移動、跳躍並更新衝刺體力。
+    function updatePlayer(dt, now) {
+      // 從左右視角角度建立水平前進方向。
+      forward.set(-Math.sin(yaw), 0, -Math.cos(yaw));
+      // 從左右視角角度建立水平向右方向。
+      right.set(Math.cos(yaw), 0, -Math.sin(yaw));
+      // 組合 WASD 和方向鍵形成移動向量。
+      const move = new THREE.Vector3();
+      // 有前進輸入時沿視角水平方向前進。
+      if (keys.KeyW || keys.ArrowUp) move.add(forward);
+      // 有後退輸入時沿視角反方向移動。
+      if (keys.KeyS || keys.ArrowDown) move.sub(forward);
+      // 有向右輸入時沿橫向向量移動。
+      if (keys.KeyD || keys.ArrowRight) move.add(right);
+      // 有向左輸入時沿橫向反方向移動。
+      if (keys.KeyA || keys.ArrowLeft) move.sub(right);
+      // 正規化斜向移動，避免同時按兩個方向速度變快。
+      if (move.lengthSq() > 0) move.normalize();
+      // 判斷 Shift 衝刺是否可用。
+      const sprinting = (keys.ShiftLeft || keys.ShiftRight) && move.lengthSq() > 0 && stamina > 0;
+      // 設定一般行走與衝刺的移動速度。
+      const speed = sprinting ? 8.1 : 4.7;
+      // 計算本幀水平移動距離，並將邊界保留角色半徑。
+      const nextX = THREE.MathUtils.clamp(player.x + move.x * speed * dt, -WORLD_LIMIT + .5, WORLD_LIMIT - .5);
+      const nextZ = THREE.MathUtils.clamp(player.z + move.z * speed * dt, -WORLD_LIMIT + .5, WORLD_LIMIT - .5);
+      // 先單獨測試 X 軸，碰到障礙時保留 Z 軸移動以沿邊滑行。
+      if (!isBlocked(nextX, player.z, .48, true)) player.x = nextX;
+      // 再以更新後的 X 座標測試 Z 軸，避免角色斜向穿過物件。
+      if (!isBlocked(player.x, nextZ, .48, true)) player.z = nextZ;
+      // 以移動速度更新步伐動畫相位。
+      if (move.lengthSq() > 0) player.walkPhase += dt * (sprinting ? 13 : 8);
+      // 衝刺時持續消耗體力。
+      if (sprinting) stamina = Math.max(0, stamina - 26 * dt);
+      // 不衝刺時逐漸恢復體力。
+      else stamina = Math.min(100, stamina + 16 * dt);
+      // 在地面按下空白鍵時給予向上的跳躍初速度。
+      if (keys.Space && player.jump <= .001) player.verticalSpeed = 5.6;
+      // 更新跳躍高度並施加重力。
+      player.jump += player.verticalSpeed * dt; player.verticalSpeed -= 15.5 * dt;
+      // 落地後重設跳躍高度與垂直速度。
+      if (player.jump < 0) { player.jump = 0; player.verticalSpeed = 0; }
+      // 將攝影機固定在地面以上與跳躍高度之上。
+      camera.position.set(player.x, terrainHeight(player.x, player.z) + 1.68 + player.jump, player.z);
+      // 依照滑鼠視角方向更新攝影機旋轉。
+      camera.rotation.order = 'YXZ'; camera.rotation.y = yaw; camera.rotation.x = pitch;
+      // 滑鼠持續按住時依照射速自動發射。
+      if (mouseDown && locked) fireWeapon(now);
+      // 換彈時間結束時補充彈匣並扣除備彈。
+      if (reloading && now >= reloadCompleteAt) {
+        // 計算目前武器彈匣還需要補充的子彈數量。
+        const needed = currentWeapon().magazine - ammo;
+        // 依備彈量限制實際補充子彈數。
+        const amount = Math.min(needed, reserveAmmo);
+        // 更新彈匣子彈數。
+        ammo += amount;
+        // 更新可用備彈數量。
+        reserveAmmo -= amount;
+        // 保存此次換彈後的彈匣和備彈資料。
+        weaponInventory[weaponIndex] = { ammo, reserve: reserveAmmo };
+        // 結束換彈狀態。
+        reloading = false;
+        // 播放彈匣卡入聲並提示裝填完成。
+        playMechanicalClick(true); showToast(`${currentWeapon().name} 裝填完成`, .75);
+      }
+      // 倒數受傷後的短暫無敵時間。
+      hurtCooldown = Math.max(0, hurtCooldown - dt);
+      // 將武器後座動畫逐漸回復至原位。
+      recoil = Math.max(0, recoil - dt * 7.5);
+      // 更新目前槍枝的走路晃動、後座和換彈動作。
+      updateWeaponAnimation(now, move.lengthSq() > 0);
+      // 射擊時短暫點亮槍口燈，否則立即關閉。
+      muzzleLight.intensity = now < muzzleUntil ? 3.8 : 0;
+    }
+    // 更新敵人追蹤、射擊與新波次生成。
+    function updateEnemies(dt, now) {
+      // 更新生成計時器。
+      spawnTimer += dt;
+      // 依照波次加快敵人進場速度。
+      const spawnInterval = Math.max(.42, 1.18 - wave * .04);
+      // 到達生成時間且仍有敵人待生成時建立新敵人。
+      if (pendingEnemies > 0 && spawnTimer >= spawnInterval) { spawnEnemy(); pendingEnemies--; spawnTimer = 0; }
+      // 逐一更新目前存活的敵人。
+      for (const enemy of enemies) {
+        // 計算敵人到玩家的水平距離向量。
+        const dx = player.x - enemy.x, dz = player.z - enemy.z;
+        // 計算敵人與玩家之間的直線距離。
+        const distance = Math.hypot(dx, dz);
+        // 敵人會快速追擊，靠近射程後停下並持續壓制玩家。
+        if (distance > 14) {
+          // 計算敵人朝玩家方向的單位向量與本幀預計位置。
+          const dirX = dx / distance, dirZ = dz / distance, step = enemy.speed * dt;
+          const nextEnemyX = enemy.x + dirX * step, nextEnemyZ = enemy.z + dirZ * step;
+          // 前進路線沒有障礙時，直接朝玩家移動。
+          if (!isBlocked(nextEnemyX, nextEnemyZ, .42)) { enemy.x = nextEnemyX; enemy.z = nextEnemyZ; }
+          // 路線受阻時沿障礙邊緣側移，避免敵人卡在樹木或岩石中。
+          else { const sideX = -dirZ, sideZ = dirX; if (!isBlocked(enemy.x + sideX * step, enemy.z + sideZ * step, .42)) { enemy.x += sideX * step; enemy.z += sideZ * step; } else if (!isBlocked(enemy.x - sideX * step, enemy.z - sideZ * step, .42)) { enemy.x -= sideX * step; enemy.z -= sideZ * step; } }
+        }
+        // 更新敵兵地面高度，並加入輕微步伐起伏與面向轉動。
+        enemy.walkPhase += dt * (distance > 14 ? 11 : 2);
+        enemy.group.position.set(enemy.x, terrainHeight(enemy.x, enemy.z) + (distance > 14 ? Math.abs(Math.sin(enemy.walkPhase)) * .045 : 0), enemy.z); enemy.group.lookAt(player.x, enemy.group.position.y + 1.2, player.z);
+        // 更新敵人受擊閃色倒數。
+        enemy.hitFlash = Math.max(0, enemy.hitFlash - dt);
+        // 受擊期間短暫提高背心自發光強度。
+        enemy.vestMaterial.emissive.setHex(enemy.hitFlash > 0 ? 0x542018 : 0x000000);
+        // 在有效範圍內依間隔向玩家射擊。
+        if (distance < 46 && now > enemy.fireAt) { enemyFire(enemy); enemy.fireAt = now + 650 + Math.random() * 500; }
+        // 敵人逼近到近戰範圍時造成傷害。
+        if (distance < 1.45 && hurtCooldown <= 0) { health = Math.max(0, health - 14); hurtCooldown = .9; showToast('受到近距離攻擊', .7); }
+      }
+      // 清除已死亡敵人，保留尚存活的敵兵。
+      enemies = enemies.filter(enemy => enemy.alive);
+      // 場上敵人清空且本波生成完畢時開始下一波計時。
+      if (pendingEnemies === 0 && enemies.length === 0) {
+        // 累加兩波之間的間隔時間。
+        intermission += dt;
+        // 休整 2.5 秒後增加波次與敵軍人數。
+        if (intermission > 2.5) { wave++; pendingEnemies = Math.min(18, 4 + wave); intermission = 0; showToast(`敵軍第 ${wave} 波接近`, 2); }
+      }
+    }
+    // 更新敵方彈體並在命中玩家時扣除生命值。
+    function updateEnemyShots(dt) {
+      // 逐發移動敵方彈體。
+      for (const shot of enemyShots) {
+        // 依照速度向量更新彈體位置。
+        shot.mesh.position.addScaledVector(shot.velocity, dt);
+        // 倒數彈體的存在時間。
+        shot.life -= dt;
+        // 彈體靠近玩家攝影機時造成傷害並移除。
+        if (shot.mesh.position.distanceTo(camera.position) < .72 && hurtCooldown <= 0) { health = Math.max(0, health - 8); hurtCooldown = .55; shot.life = 0; showToast('受到敵方射擊', .7); }
+      }
+      // 移除過期彈體並清理對應的幾何與材質。
+      enemyShots = enemyShots.filter(shot => { if (shot.life <= 0) { scene.remove(shot.mesh); shot.mesh.geometry.dispose(); shot.mesh.material.dispose(); return false; } return true; });
+    }
+    // 更新曳光線的消失計時並釋放已過期資源。
+    function updateTracers(dt) {
+      // 逐一倒數每條玩家射擊曳光線。
+      for (const tracer of tracers) tracer.life -= dt;
+      // 移除消失的曳光線並回收緩衝幾何。
+      tracers = tracers.filter(tracer => { if (tracer.life <= 0) { scene.remove(tracer.object); tracer.geometry.dispose(); return false; } return true; });
+    }
+    // 更新雨滴和雪花粒子座標，讓它們跟著玩家移動。
+    function updateWeather(dt, now) {
+      // 雨勢只在降雨或雷暴天氣時可見。
+      const raining = weather === '降雨' || weather === '雷暴'; rainLines.visible = raining;
+      // 雪花只在降雪時可見。
+      snowPoints.visible = weather === '降雪';
+      // 取得雨滴動態位置陣列。
+      const rainAttribute = rainGeometry.attributes.position;
+      // 逐條更新雨滴並在落地後從上方重新生成。
+      for (let i = 0; i < rainCount; i++) {
+        // 讀取每條雨線頭端在位置陣列中的索引。
+        const p = i * 2;
+        // 取得目前雨滴的世界座標。
+        let x = rainAttribute.getX(p), y = rainAttribute.getY(p), z = rainAttribute.getZ(p);
+        // 雨滴隨風略微向斜前方移動。
+        x -= dt * 3.5; z += dt * 1.8; y -= dt * 32;
+        // 雨滴落到地面後從玩家附近高空重新開始。
+        if (y < terrainHeight(x, z) - 1) { x = player.x + (Math.random() - .5) * 42; y = 18 + Math.random() * 15; z = player.z + (Math.random() - .5) * 42; }
+        // 更新雨線頭端的位置。
+        rainAttribute.setXYZ(p, x, y, z);
+        // 更新雨線尾端位置，形成下落細線。
+        rainAttribute.setXYZ(p + 1, x - .25, y - .95, z);
+      }
+      // 通知 WebGL 雨線頂點資料已更新。
+      rainAttribute.needsUpdate = true;
+      // 取得雪花粒子位置陣列。
+      const snowAttribute = snowGeometry.attributes.position;
+      // 逐片更新雪花飄落和水平漂移。
+      for (let i = 0; i < snowCount; i++) {
+        // 取得雪花目前的世界座標。
+        let x = snowAttribute.getX(i), y = snowAttribute.getY(i), z = snowAttribute.getZ(i);
+        // 雪花受微風影響緩慢飄落。
+        x += Math.sin(now / 800 + i) * dt * .8; y -= dt * (1.6 + (i % 8) * .16); z += Math.cos(now / 900 + i) * dt * .35;
+        // 雪花落地後從玩家附近重新生成。
+        if (y < terrainHeight(x, z)) { x = player.x + (Math.random() - .5) * 42; y = 16 + Math.random() * 15; z = player.z + (Math.random() - .5) * 42; }
+        // 將更新後的座標寫回粒子資料。
+        snowAttribute.setXYZ(i, x, y, z);
+      }
+      // 通知 WebGL 雪花頂點位置有更新。
+      snowAttribute.needsUpdate = true;
+      // 天氣每 27 秒依序切換。
+      if (now - weatherChangedAt > 27000) { weatherChangedAt = now; weatherIndex = (weatherIndex + 1) % weatherCycle.length; weather = weatherCycle[weatherIndex]; showToast(`天候變化：${weather}`, 1.5); }
+      // 濃霧時縮短能見距離，其他天氣恢復一般視距。
+      scene.fog.near = weather === '濃霧' ? 9 : 55; scene.fog.far = weather === '濃霧' ? 70 : 185;
+      // 雷暴時隨機安排閃電，避免連續頻閃。
+      if (weather === '雷暴' && now > lightningUntil && Math.random() < .003) { lightningUntil = now + 135; }
+      // 閃電期間短暫點亮高空光源與環境光。
+      const flash = now < lightningUntil ? 8 : 0; lightningLight.intensity = flash; lightningLight.position.set(player.x + 8, 28, player.z - 15);
+    }
+    // 根據一天相位調整天空、日月位置和方向光強度。
+    function updateDayNight(now) {
+      // 計算 0 到 1 的完整日夜循環相位。
+      const phase = ((now - dayStart) % DAY_LENGTH) / DAY_LENGTH;
+      // 計算太陽從地平線升起、到高空再落下的角度。
+      const angle = phase * Math.PI * 2 - Math.PI / 2;
+      // 將角度換算成白天亮度，日出日落時平滑過渡。
+      const daylight = Math.max(0, Math.sin(angle));
+      // 計算清晨或黃昏時的過渡亮度。
+      const twilight = Math.max(0, 1 - Math.abs(Math.sin(angle)) * 4.2);
+      // 以白天光線強度和黃昏暖光混合天空顏色。
+      const daySky = new THREE.Color('#80a9c1');
+      // 設定黃昏偏暖的天空顏色。
+      const duskSky = new THREE.Color('#bd8065');
+      // 設定深夜冷藍色天空。
+      const nightSky = new THREE.Color('#111c31');
+      // 依天光程度選擇天空顏色。
+      skyColor.copy(daylight > .04 ? nightSky.clone().lerp(daySky, Math.min(1, daylight * 1.4)) : nightSky.clone().lerp(duskSky, twilight * .72));
+      // 更新場景背景與霧氣色彩。
+      scene.background.copy(skyColor); scene.fog.color.copy(skyColor);
+      // 讓雲層在陰雨與雷暴時顯得更暗。
+      cloudMaterial.color.set(weather === '陰雨' || weather === '雷暴' ? 0x879198 : 0xc3cbd0);
+      // 更新日光色彩與強度。
+      sunLight.color.set(daylight > .2 ? 0xffe2bd : 0xffc08b); sunLight.intensity = .16 + daylight * 3.1 + twilight * .32;
+      // 更新月光強度，夜間提高月光能見度。
+      moonLight.intensity = .08 + (1 - daylight) * .27;
+      // 計算太陽沿天空弧線的世界座標。
+      const sunX = player.x + Math.cos(angle) * 128, sunY = 25 + Math.sin(angle) * 85, sunZ = player.z - 145;
+      // 將太陽球體與方向光對準同一位置。
+      sunMesh.position.set(sunX, sunY, sunZ); sunLight.position.set(sunX, sunY, sunZ); sunLight.target.position.set(player.x, 0, player.z);
+      // 將月亮放在太陽對側的天空。
+      moonMesh.position.set(player.x - Math.cos(angle) * 118, 25 - Math.sin(angle) * 78, player.z - 145);
+      // 月亮與星星只在夜晚明顯可見。
+      moonMesh.visible = daylight < .12; stars.visible = daylight < .42;
+      // 將星空點雲中心跟隨玩家，保持頭頂天空完整。
+      stars.position.set(player.x, 0, player.z);
+      // 太陽只在地平線以上時顯示。
+      sunMesh.visible = daylight > .02;
+      // 傳回日夜相位與亮度，供 HUD 顯示時間使用。
+      return { phase, daylight };
+    }
+    // 更新高空雲朵的位置，模擬持續風向。
+    function updateClouds(dt) {
+      // 逐朵平移雲群並讓雲朵在戰場上循環。
+      for (const cloud of cloudObjects) { cloud.position.x += cloud.userData.speed * dt; if (cloud.position.x > player.x + 160) cloud.position.x = player.x - 160; }
+    }
+    // 更新畫面上的時間、生命、體力和彈藥數值。
+    function updateHUD(now, light) {
+      // 由日夜相位換算遊戲內總分鐘數。
+      const totalMinutes = Math.floor(light.phase * 24 * 60);
+      // 將遊戲內時間拆成小時和分鐘。
+      const hour = Math.floor(totalMinutes / 60), minute = totalMinutes % 60;
+      // 顯示遊戲內 24 小時制時間。
+      ui.time.textContent = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+      // 更新波次編號。
+      ui.wave.textContent = String(wave).padStart(2, '0');
+      // 更新天氣名稱。
+      ui.weather.textContent = weather;
+      // 更新分數並補上前導零。
+      ui.score.textContent = String(score).padStart(6, '0');
+      // 更新玩家生命值數字。
+      ui.health.textContent = String(Math.ceil(health));
+      // 更新生命條寬度。
+      ui.healthFill.style.width = `${Math.max(0, health)}%`;
+      // 生命偏低時將生命條改為警示紅色。
+      ui.healthFill.style.background = health < 30 ? 'linear-gradient(90deg,#9d4c43,#db8167)' : 'linear-gradient(90deg,#71936a,#a9c18c)';
+      // 更新體力百分比文字與條狀長度。
+      ui.stamina.textContent = `${Math.round(stamina)}%`; ui.staminaFill.style.width = `${stamina}%`;
+      // 更新目前彈匣數量和備彈數。
+      ui.ammo.innerHTML = `${String(ammo).padStart(2, '0')} <span style="color:#899184;font-size:17px">/ ${reserveAmmo}</span>`;
+      // 顯示武器就緒或換彈中的狀態。
+      ui.weapon.textContent = reloading ? `${currentWeapon().name}　·　裝填中…` : `${currentWeapon().name}　·　READY`;
+      // 倒數中央提示訊息並於時間到後隱藏。
+      if (toastTimer > 0) { toastTimer -= 1 / 60; if (toastTimer <= 0) toast.classList.remove('visible'); }
+    }
+    // 啟動第一人稱滑鼠控制並隱藏開始畫面。
+    function enterBattle() {
+      // 遊戲結束後不允許以點擊繼續原場戰鬥。
+      if (gameOver) return;
+      // 由使用者點擊解鎖瀏覽器音訊並啟動戰場氛圍音樂。
+      ensureAudio(); setMusicPaused(false);
+      // 記錄遊戲已經開始。
+      started = true;
+      // 請瀏覽器鎖定滑鼠游標，讓移動量用於視角控制。
+      canvas.requestPointerLock();
+    }
+    // 將滑鼠視角輸入轉換成攝影機左右和上下角度。
+    function onMouseMove(event) {
+      // 只有鎖定滑鼠且遊戲正在進行時才更新視角。
+      if (!locked || paused || gameOver) return;
+      // 依滑鼠水平位移改變左右視角。
+      yaw -= event.movementX * .0022;
+      // 依滑鼠垂直位移改變上下視角並限制仰俯角。
+      pitch = THREE.MathUtils.clamp(pitch - event.movementY * .002, -1.34, 1.34);
+    }
+    // 顯示遊戲暫停狀態的中央文字。
+    function showPauseOverlay() {
+      // 更新標題、操作文字與提示。
+      overlayTitle.textContent = '任務暫停'; overlayText.textContent = '目前戰場已暫停。確認周遭狀況後，點擊畫面即可回到戰鬥。'; overlayHint.textContent = '點擊畫面繼續　·　ESC 釋放滑鼠';
+      // 顯示覆蓋面板。
+      overlay.classList.remove('hidden');
+    }
+    // 顯示任務結束資訊與重新開始方式。
+    function showGameOver() {
+      // 更新結束標題。
+      overlayTitle.textContent = '任務中止';
+      // 顯示本場累計分數和抵達波次。
+      overlayText.textContent = `生命值耗盡。最終得分 ${score}，抵達第 ${wave} 波。`;
+      // 顯示重新開始提示。
+      overlayHint.textContent = '按 Enter 重新部署';
+      // 任務結束後將背景音樂柔和轉低。
+      setMusicPaused(true);
+      // 顯示結束面板。
+      overlay.classList.remove('hidden');
+      // 釋放滑鼠鎖定，讓玩家可以使用網頁游標。
+      if (document.pointerLockElement) document.exitPointerLock();
+    }
+    // 重新設定所有玩家、敵人、彈藥與波次狀態。
+    function restartGame() {
+      // 重設玩家位置、跳躍高度和視角方向。
+      player.x = 0; player.z = 0; player.jump = 0; player.verticalSpeed = 0; yaw = 0; pitch = 0;
+      // 將攝影機重設到出生地形表面上方並清除舊視角角度。
+      camera.position.set(player.x, terrainHeight(player.x, player.z) + 1.68, player.z); camera.rotation.set(0, 0, 0);
+      // 重設三種武器各自的初始彈匣和備用彈藥。
+      weaponTypes.forEach((item, index) => { weaponInventory[index] = { ammo: item.magazine, reserve: item.reserve }; });
+      // 回到突擊步槍並恢復生命、體力和彈藥。
+      weaponIndex = 0; health = 100; stamina = 100; ammo = weaponInventory[0].ammo; reserveAmmo = weaponInventory[0].reserve;
+      // 重置換彈階段、槍枝姿態和快捷欄選取狀態。
+      reloadStartedAt = 0; reloadClickPlayed = false; applyWeaponModel(); weapon.rotation.set(0, 0, 0); weapon.position.y = -.31;
+      // 重設分數、波次和敵軍生成數。
+      score = 0; wave = 1; pendingEnemies = 5; spawnTimer = 0; intermission = 0;
+      // 重設換彈、傷害和遊戲結束狀態。
+      reloading = false; hurtCooldown = 0; gameOver = false; paused = false; started = false; setMusicPaused(false);
+      // 移除戰場上所有敵人模型。
+      for (const enemy of enemies) scene.remove(enemy.group);
+      // 清空敵軍陣列。
+      enemies = [];
+      // 移除尚未消失的敵方彈體。
+      for (const shot of enemyShots) { scene.remove(shot.mesh); shot.mesh.geometry.dispose(); shot.mesh.material.dispose(); }
+      // 清空敵方彈體清單。
+      enemyShots = [];
+      // 移除尚未消失的玩家曳光線。
+      for (const tracer of tracers) { scene.remove(tracer.object); tracer.geometry.dispose(); }
+      // 清空曳光線清單。
+      tracers = [];
+      // 重新啟動日夜循環和晴朗天氣。
+      dayStart = performance.now() - DAY_LENGTH * .32; weather = '晴朗'; weatherIndex = 0; weatherChangedAt = performance.now();
+      // 顯示開始任務面板。
+      overlayTitle.textContent = '前線哨站'; overlayText.textContent = '第一人稱 3D 生存射擊。清除逐波逼近的敵軍，在變化的日夜與天候中守住哨站。WASD 移動、滑鼠瞄準、左鍵射擊；按 1／2／3 切換武器，R 換彈，M 切換音效。'; overlayHint.textContent = '點擊畫面進入戰場　·　ESC 可釋放滑鼠'; overlay.classList.remove('hidden');
+    }
+    // 讓畫面尺寸改變時同步更新攝影機比例和渲染器大小。
+    window.addEventListener('resize', () => {
+      // 讀取最新的瀏覽器寬度和高度。
+      const width = window.innerWidth, height = window.innerHeight;
+      // 更新攝影機視角寬高比。
+      camera.aspect = width / height; camera.updateProjectionMatrix();
+      // 更新渲染器輸出尺寸。
+      renderer.setSize(width, height, false);
+      // 重新限制畫面像素比，平衡清晰度與效能。
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+    });
+    // 當滑鼠移動時更新第一人稱視角。
+    document.addEventListener('mousemove', onMouseMove);
+    // 當瀏覽器成功鎖定或釋放滑鼠時同步遊戲狀態。
+    document.addEventListener('pointerlockchange', () => {
+      // 更新目前滑鼠鎖定狀態。
+      locked = document.pointerLockElement === canvas;
+      // 取得滑鼠鎖定後自動進入戰鬥。
+      if (locked) { started = true; paused = false; setMusicPaused(false); overlay.classList.add('hidden'); }
+      // 玩家按 ESC 釋放滑鼠時顯示暫停提示。
+      else if (started && !gameOver) { paused = true; mouseDown = false; setMusicPaused(true); showPauseOverlay(); }
+    });
+    // 音效按鈕可在開始前或戰鬥中開關背景音樂與槍械音效。
+    soundToggle.addEventListener('click', (event) => { event.stopPropagation(); setSoundEnabled(!soundEnabled); });
+    // 點擊覆蓋面板時開始任務或重新取得滑鼠控制。
+    overlay.addEventListener('click', () => { if (!gameOver) enterBattle(); });
+    // 監聽畫布滑鼠按下事件以進行射擊或第一次鎖定。
+    canvas.addEventListener('pointerdown', (event) => {
+      // 只使用滑鼠左鍵開火。
+      if (event.button !== 0) return;
+      // 尚未取得滑鼠鎖定時，第一次點擊只開始戰鬥。
+      if (!locked) { enterBattle(); return; }
+      // 遊戲正常進行時按住左鍵會持續射擊。
+      if (!paused && !gameOver) mouseDown = true;
+    });
+    // 釋放滑鼠左鍵後停止連發。
+    window.addEventListener('pointerup', () => { mouseDown = false; });
+    // 監聽按鍵按下事件並處理移動、換彈、暫停等操作。
+    window.addEventListener('keydown', (event) => {
+      // 阻止空白鍵、方向鍵和 Tab 以外的操作捲動頁面。
+      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
+      // 記錄目前按鍵狀態供持續移動判斷。
+      keys[event.code] = true;
+      // 按 R 時開始手動換彈。
+      if (event.code === 'KeyR' && !gameOver) beginReload();
+      // 按 1、2、3 切換至突擊步槍、狙擊槍或散彈槍。
+      if (['Digit1', 'Numpad1'].includes(event.code)) selectWeapon(0);
+      if (['Digit2', 'Numpad2'].includes(event.code)) selectWeapon(1);
+      if (['Digit3', 'Numpad3'].includes(event.code)) selectWeapon(2);
+      // 按 M 切換背景音樂和槍械效果音。
+      if (event.code === 'KeyM' && !event.repeat) setSoundEnabled(!soundEnabled);
+      // 按 P 時切換暫停狀態並釋放滑鼠鎖定。
+      if (event.code === 'KeyP' && started && !gameOver) { paused = !paused; if (paused) { mouseDown = false; showPauseOverlay(); if (document.pointerLockElement) document.exitPointerLock(); } else enterBattle(); }
+      // 任務結束時按 Enter 重新部署。
+      if (event.code === 'Enter' && gameOver) restartGame();
+    });
+    // 按鍵放開時清除對應的移動輸入狀態。
+    window.addEventListener('keyup', (event) => { keys[event.code] = false; });
+    // 避免右鍵或中鍵在遊戲畫面開啟瀏覽器選單。
+    canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+    // 主動畫迴圈負責所有狀態更新和 3D 場景繪製。
+    function animate(now) {
+      // 使用時間差讓不同更新率的螢幕都有一致速度。
+      const dt = Math.min(.04, (now - lastFrame) / 1000);
+      // 更新上一幀時間戳記。
+      lastFrame = now;
+      // 即使未開始遊戲，日夜、雲層與背景天氣仍持續動畫。
+      const light = updateDayNight(now);
+      // 只有進行中的任務才更新玩家和敵人邏輯。
+      if (started && !paused && !gameOver) {
+        // 更新玩家位置、跳躍、體力、射擊和換彈狀態。
+        updatePlayer(dt, now);
+        // 更新敵軍接近、射擊與波次生成。
+        updateEnemies(dt, now);
+        // 更新敵方彈體與命中傷害。
+        updateEnemyShots(dt);
+      }
+      // 更新雲朵位置和天氣粒子效果。
+      updateClouds(dt); updateWeather(dt, now);
+      // 更新玩家射擊曳光線的生命週期。
+      updateTracers(dt);
+      // 玩家生命歸零時結束任務。
+      if (health <= 0 && !gameOver) { gameOver = true; showGameOver(); }
+      // 將玩家附近的物件陰影焦點跟隨攝影機。
+      sunLight.shadow.camera.updateProjectionMatrix();
+      // 更新 HUD 的戰況、狀態條和時間文字。
+      updateHUD(now, light);
+      // 繪製目前場景與攝影機畫面。
+      renderer.render(scene, camera);
+      // 要求瀏覽器在下一個畫面更新週期呼叫動畫迴圈。
+      requestAnimationFrame(animate);
+    }
+    // 啟動 Three.js 動畫迴圈。
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
